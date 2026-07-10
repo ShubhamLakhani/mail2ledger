@@ -40,16 +40,17 @@ function getEmailsForSender(senderEmail, maxResults) {
 }
 
 /**
- * Safely extracts the plain text body from a GmailMessage.
+ * Safely extracts the plain text body from a GmailMessage and normalizes it.
  *
  * @param {GoogleAppsScript.Gmail.GmailMessage} message The Gmail message.
- * @return {string} The plain text body or empty string if unavailable.
+ * @return {string} The normalized plain text body or empty string if unavailable.
  */
 function getPlainTextBody(message) {
   try {
     if (!message) return "";
     var body = message.getPlainBody();
-    return body || "";
+    if (!body) return "";
+    return normalizeEmailText(body);
   } catch (e) {
     Logger.log("Error reading message body: " + e.toString());
     return "";
@@ -57,7 +58,7 @@ function getPlainTextBody(message) {
 }
 
 /**
- * Logs details of a GmailMessage in a standardized layout.
+ * Logs details of a GmailMessage in a standardized layout, showcasing the normalized body.
  *
  * @param {GoogleAppsScript.Gmail.GmailMessage} message The Gmail message.
  */
@@ -65,7 +66,7 @@ function logEmailSummary(message) {
   try {
     if (!message) return;
     var body = getPlainTextBody(message);
-    var snippet = body.substring(0, 250);
+    var snippet = body.substring(0, 400);
     
     Logger.log("----------------------------------------");
     Logger.log("Message ID: " + message.getId());
