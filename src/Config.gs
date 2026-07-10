@@ -8,7 +8,73 @@
  *
  * @return {Object} An object containing key/value configuration pairs.
  */
+var _cachedConfig = null;
+
+/**
+ * Loads the entire configuration once, caches it, and maps account identifiers.
+ *
+ * @return {Object} The configuration object.
+ */
+function getConfig() {
+  if (_cachedConfig === null) {
+    Logger.log("Loaded configuration.");
+    var settings = loadSettingsFromSheet();
+    var accounts = loadAccountsFromSheet();
+    var emailSenders = loadEmailSendersFromSheet();
+    
+    var accountsLookup = {};
+    accounts.forEach(function(acc) {
+      if (acc.identifier) {
+        accountsLookup[String(acc.identifier).trim()] = acc;
+      }
+    });
+    
+    _cachedConfig = {
+      settings: settings,
+      accounts: accounts,
+      emailSenders: emailSenders,
+      accountsLookup: accountsLookup
+    };
+    
+    Logger.log("Accounts: " + accounts.length);
+    Logger.log("Senders: " + emailSenders.length);
+  }
+  return _cachedConfig;
+}
+
+/**
+ * Retrieves all configuration settings from the Settings sheet.
+ *
+ * @return {Object} An object containing key/value configuration pairs.
+ */
 function getSettings() {
+  return getConfig().settings;
+}
+
+/**
+ * Retrieves all active account configurations from the Accounts sheet.
+ *
+ * @return {Array<Object>} An array of active account objects.
+ */
+function getAccounts() {
+  return getConfig().accounts;
+}
+
+/**
+ * Retrieves all active email senders mapped to their respective banks.
+ *
+ * @return {Array<Object>} An array of active email sender configurations.
+ */
+function getEmailSenders() {
+  return getConfig().emailSenders;
+}
+
+/**
+ * Loads all settings directly from the Settings sheet.
+ *
+ * @return {Object} Settings key-value pairs.
+ */
+function loadSettingsFromSheet() {
   var rows = getSheetData("Settings");
   var settings = {};
   
@@ -21,16 +87,15 @@ function getSettings() {
     }
   });
   
-  Logger.log("Retrieved settings: " + JSON.stringify(settings));
   return settings;
 }
 
 /**
- * Retrieves all active account configurations from the Accounts sheet.
+ * Loads active accounts directly from the Accounts sheet.
  *
- * @return {Array<Object>} An array of active account objects.
+ * @return {Array<Object>} Active accounts list.
  */
-function getAccounts() {
+function loadAccountsFromSheet() {
   var rows = getSheetData("Accounts");
   var accounts = [];
   
@@ -49,23 +114,21 @@ function getAccounts() {
     }
   });
   
-  Logger.log("Retrieved active accounts count: " + accounts.length);
   return accounts;
 }
 
 /**
- * Retrieves all active email senders mapped to their respective banks.
+ * Loads active email senders directly from the EmailSenders sheet.
  *
- * @return {Array<Object>} An array of active email sender configurations.
+ * @return {Array<Object>} Active senders list.
  */
-function getEmailSenders() {
+function loadEmailSendersFromSheet() {
   var headers = getSheetHeaders("EmailSenders");
   var bankIdx = headers.indexOf("Bank");
   var senderIdx = headers.indexOf("Sender Email");
   var parserIdx = headers.indexOf("Parser");
   var activeIdx = headers.indexOf("Active");
 
-  // Fallback to absolute index values if header layout is missing or unreadable
   if (bankIdx === -1) bankIdx = 0;
   if (senderIdx === -1) senderIdx = 1;
   if (activeIdx === -1) {
@@ -87,7 +150,6 @@ function getEmailSenders() {
     }
   });
   
-  Logger.log("Retrieved active email senders count: " + senders.length);
   return senders;
 }
 

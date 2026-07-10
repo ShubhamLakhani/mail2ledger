@@ -3,6 +3,40 @@
  * @description Parser module specifically designed for HDFC Bank transaction alert emails (debit/credit card, netbanking, UPI).
  */
 
+// Global Regex Constants
+const REGEX_AMOUNT = /Rs\.([\d,]+\.\d{2})/i;
+const REGEX_DEBIT_ACCOUNT = /account ending\s+(\d{4})/i;
+const REGEX_DEBIT_DATE = /on\s+(\d{2}-\d{2}-\d{2})/i;
+const REGEX_DEBIT_REFERENCE = /UPI transaction reference no\.\:\s*(\d+)/i;
+const REGEX_DEBIT_MERCHANT = /towards VPA\s+[^\s]+\s+\((.*?)\)/i;
+const REGEX_DEBIT_VPA = /towards VPA\s+([^\s]+)/i;
+
+const REGEX_CREDIT_ACCOUNT = /ending in (\d{4})/i;
+const REGEX_CREDIT_REFERENCE = /(?:UPI Reference No|Reference No|Ref No)\.?\s*:\s*([A-Za-z0-9]+)/i;
+const REGEX_CREDIT_SENDER = /Sender\s*:\s*([^\n\r]+)/i;
+const REGEX_CREDIT_DATE = /Date\s*:\s*([^\n\r]+)/i;
+
+// Template definition array
+const HDFC_TEMPLATES = [
+  {
+    name: "UPI_DEBIT",
+    matches: function(body) {
+      return body.includes("is debited")
+          && body.includes("towards VPA")
+          && body.includes("UPI transaction reference");
+    },
+    parser: parseHDFCDebit
+  },
+  {
+    name: "UPI_CREDIT",
+    matches: function(body) {
+      return body.includes("has been successfully credited")
+          && body.includes("UPI Reference No.");
+    },
+    parser: parseHDFCCredit
+  }
+];
+
 /**
  * Parses HDFC Bank transaction alert emails.
  *
@@ -12,15 +46,16 @@
 function parseHDFC(context) {
   var body = context.body || "";
   
-  if (body.indexOf("is debited") !== -1) {
-    return parseHDFCDebit(context);
-  } else if (body.indexOf("has been successfully credited") !== -1) {
-    return parseHDFCCredit(context);
-  } else {
-    var transaction = createParserStubResult("HDFC", context);
-    transaction.errors.push("Unsupported HDFC email template.");
-    return transaction;
+  for (var i = 0; i < HDFC_TEMPLATES.length; i++) {
+    var template = HDFC_TEMPLATES[i];
+    if (template.matches(body)) {
+      return template.parser(context);
+    }
   }
+  
+  var transaction = createParserStubResult("HDFC", context);
+  transaction.errors.push("Unsupported HDFC template.");
+  return transaction;
 }
 
 /**
@@ -43,9 +78,9 @@ function parseHDFCDebit(context) {
   var errors = [];
 
   // Extract amount
-  var amountMatch = body.match(/Rs\.?\s*([\d,]+\.\d{2})/i);
-  if (amountMatch) {
-    var amt = parseFloat(amountMatch[1].replace(/,/g, ""));
+  var amountStr = extractMatch(body, REGEX_AMOUNT);
+  if (amountStr) {
+    var amt = parseFloat(amountStr.replace(/,/g, ""));
     transaction.amount = amt;
     transaction.withdrawal = amt;
   } else {
@@ -53,34 +88,43 @@ function parseHDFCDebit(context) {
   }
 
   // Extract account identifier (last four digits)
-  var accountMatch = body.match(/ending in (\d{4})/i);
-  if (accountMatch) {
-    var lastFour = accountMatch[1];
-    mapAccountId(transaction, lastFour);
+  var lastFour = extractMatch(body, REGEX_DEBIT_ACCOUNT);
+  if (lastFour) {
+    mapAccountId(transaction, lastFour, context);
   } else {
     errors.push("Failed to extract account identifier.");
   }
 
   // Extract reference number
-  var refMatch = body.match(/(?:Reference No|Ref No|UPI Reference No)\.?\s*:\s*([A-Za-z0-9]+)/i);
-  if (refMatch) {
-    transaction.referenceNumber = refMatch[1].trim();
+  var ref = extractMatch(body, REGEX_DEBIT_REFERENCE);
+  if (ref) {
+    transaction.referenceNumber = ref;
   } else {
     errors.push("Failed to extract reference number.");
   }
 
-  // Extract merchant / particulars
-  var partMatch = body.match(/(?:Merchant\s*\/\s*Particulars|Merchant|Particulars)\s*:\s*([^\n\r]+)/i);
-  if (partMatch) {
-    transaction.particulars = partMatch[1].trim();
+  // Extract VPA and Merchant
+  var merchant = extractMatch(body, REGEX_DEBIT_MERCHANT);
+  var vpa = extractMatch(body, REGEX_DEBIT_VPA);
+  
+  if (vpa) {
+    transaction.billNumber = vpa;
+  }
+  
+  if (merchant) {
+    transaction.particulars = "UPI TO " + merchant;
+  } else if (vpa) {
+    transaction.particulars = "UPI TO " + vpa;
   } else {
     errors.push("Failed to extract merchant/particulars.");
   }
 
   // Extract transaction date
-  var dateMatch = body.match(/Date\s*:\s*([^\n\r]+)/i);
-  if (dateMatch) {
-    transaction.transactionDate = dateMatch[1].trim();
+  var dateStr = extractMatch(body, REGEX_DEBIT_DATE);
+  if (dateStr) {
+    transaction.transactionDate = normalizeDate(dateStr);
+  } else {
+    errors.push("Failed to extract transaction date.");
   }
 
   if (errors.length === 0) {
@@ -90,7 +134,8 @@ function parseHDFCDebit(context) {
     transaction.errors = errors;
   }
 
-  return transaction;
+  // Validate and return
+  return validateTransaction(transaction);
 }
 
 /**
@@ -113,9 +158,9 @@ function parseHDFCCredit(context) {
   var errors = [];
 
   // Extract amount
-  var amountMatch = body.match(/Rs\.?\s*([\d,]+\.\d{2})/i);
-  if (amountMatch) {
-    var amt = parseFloat(amountMatch[1].replace(/,/g, ""));
+  var amountStr = extractMatch(body, REGEX_AMOUNT);
+  if (amountStr) {
+    var amt = parseFloat(amountStr.replace(/,/g, ""));
     transaction.amount = amt;
     transaction.deposit = amt;
   } else {
@@ -123,34 +168,33 @@ function parseHDFCCredit(context) {
   }
 
   // Extract account identifier (last four digits)
-  var accountMatch = body.match(/ending in (\d{4})/i);
-  if (accountMatch) {
-    var lastFour = accountMatch[1];
-    mapAccountId(transaction, lastFour);
+  var lastFour = extractMatch(body, REGEX_CREDIT_ACCOUNT);
+  if (lastFour) {
+    mapAccountId(transaction, lastFour, context);
   } else {
     errors.push("Failed to extract account identifier.");
   }
 
   // Extract reference number
-  var refMatch = body.match(/(?:UPI Reference No|Reference No|Ref No)\.?\s*:\s*([A-Za-z0-9]+)/i);
-  if (refMatch) {
-    transaction.referenceNumber = refMatch[1].trim();
+  var ref = extractMatch(body, REGEX_CREDIT_REFERENCE);
+  if (ref) {
+    transaction.referenceNumber = ref;
   } else {
     errors.push("Failed to extract reference number.");
   }
 
   // Extract sender name
-  var senderMatch = body.match(/Sender\s*:\s*([^\n\r]+)/i);
-  if (senderMatch) {
-    transaction.particulars = senderMatch[1].trim();
+  var senderName = extractMatch(body, REGEX_CREDIT_SENDER);
+  if (senderName) {
+    transaction.particulars = senderName;
   } else {
     errors.push("Failed to extract sender name.");
   }
 
   // Extract transaction date
-  var dateMatch = body.match(/Date\s*:\s*([^\n\r]+)/i);
-  if (dateMatch) {
-    transaction.transactionDate = dateMatch[1].trim();
+  var dateStr = extractMatch(body, REGEX_CREDIT_DATE);
+  if (dateStr) {
+    transaction.transactionDate = normalizeDate(dateStr);
   } else {
     errors.push("Failed to extract transaction date.");
   }
@@ -162,21 +206,32 @@ function parseHDFCCredit(context) {
     transaction.errors = errors;
   }
 
-  return transaction;
+  // Validate and return
+  return validateTransaction(transaction);
 }
 
 /**
- * Maps the account last 4 digits identifier to account ID from Accounts sheet.
+ * Maps the account last 4 digits identifier to account ID using O(1) lookup.
  *
  * @param {Object} transaction The transaction object to update.
  * @param {string} lastFour The 4-digit account identifier.
+ * @param {Object} [context] The parser context containing cache.
  */
-function mapAccountId(transaction, lastFour) {
-  var accounts = getAccounts();
-  var matchedAccount = accounts.find(function(acc) {
-    return String(acc.identifier).trim() === lastFour;
-  });
-  if (matchedAccount) {
-    transaction.accountId = matchedAccount.accountId;
+function mapAccountId(transaction, lastFour, context) {
+  var lookup = context && context.config ? context.config.accountsLookup : null;
+  if (lookup) {
+    var matchedAccount = lookup[lastFour];
+    if (matchedAccount) {
+      transaction.accountId = matchedAccount.accountId;
+    }
+  } else {
+    // Fallback lookup if context/config is not populated
+    var accounts = getAccounts();
+    var matchedAccount = accounts.find(function(acc) {
+      return String(acc.identifier).trim() === lastFour;
+    });
+    if (matchedAccount) {
+      transaction.accountId = matchedAccount.accountId;
+    }
   }
 }

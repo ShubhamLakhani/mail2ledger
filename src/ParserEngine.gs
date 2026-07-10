@@ -44,16 +44,18 @@ function parseEmail(context, parserName) {
  * Builds a standardized email context object from a GmailMessage.
  *
  * @param {GoogleAppsScript.Gmail.GmailMessage} message The Gmail message.
+ * @param {Object} [config] Configuration object.
  * @return {Object} Standardized email context.
  */
-function buildEmailContext(message) {
+function buildEmailContext(message, config) {
   return {
     messageId: message.getId(),
     threadId: message.getThread().getId(),
     from: message.getFrom(),
     subject: message.getSubject(),
     date: message.getDate(),
-    body: getPlainTextBody(message)
+    body: getPlainTextBody(message),
+    config: config || getConfig()
   };
 }
 
@@ -102,5 +104,49 @@ function createParserStubResult(bank, context) {
   transaction.sender = context.from;
   transaction.messageId = context.messageId;
   transaction.threadId = context.threadId;
+  return transaction;
+}
+
+/**
+ * Validates a transaction object against required fields and updates success and errors list.
+ *
+ * @param {Object} transaction The transaction object.
+ * @return {Object} The updated transaction object.
+ */
+function validateTransaction(transaction) {
+  if (!transaction) return transaction;
+  
+  var errors = transaction.errors || [];
+  var hasMissing = false;
+  
+  if (!transaction.bank || String(transaction.bank).trim() === "") {
+    errors.push("Missing bank");
+    hasMissing = true;
+  }
+  if (!transaction.accountId || String(transaction.accountId).trim() === "") {
+    errors.push("Missing account mapping");
+    hasMissing = true;
+  }
+  if (!transaction.transactionType || String(transaction.transactionType).trim() === "") {
+    errors.push("Missing transaction type");
+    hasMissing = true;
+  }
+  if (transaction.amount === null || transaction.amount === undefined || isNaN(transaction.amount)) {
+    errors.push("Missing transaction amount");
+    hasMissing = true;
+  }
+  if (!transaction.referenceNumber || String(transaction.referenceNumber).trim() === "") {
+    errors.push("Missing reference number");
+    hasMissing = true;
+  }
+  if (!transaction.transactionDate || String(transaction.transactionDate).trim() === "") {
+    errors.push("Missing transaction date");
+    hasMissing = true;
+  }
+  
+  if (hasMissing) {
+    transaction.success = false;
+  }
+  transaction.errors = errors;
   return transaction;
 }

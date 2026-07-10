@@ -67,3 +67,60 @@ function normalizeEmailText(text) {
   // 7. Return normalized text
   return trimmedLines.join("\n");
 }
+
+/**
+ * Normalizes transaction dates from DD-MM-YY or DD/MM/YY to YYYY-MM-DD.
+ *
+ * @param {string} dateString The raw date string.
+ * @return {string} The normalized YYYY-MM-DD date or empty string if failed.
+ */
+function normalizeDate(dateString) {
+  try {
+    if (!dateString) return "";
+    var cleaned = String(dateString).trim();
+    // Match DD-MM-YY or DD/MM/YY
+    var match = cleaned.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})$/);
+    if (!match) return "";
+    
+    var day = match[1];
+    var month = match[2];
+    var year = match[3];
+    
+    // Ensure two digits for day and month
+    if (day.length === 1) day = "0" + day;
+    if (month.length === 1) month = "0" + month;
+    
+    // Convert two digit year to 20XX
+    if (year.length === 2) {
+      year = "20" + year;
+    }
+    
+    // Simple validation of parsed numbers
+    var d = parseInt(day, 10);
+    var m = parseInt(month, 10);
+    var y = parseInt(year, 10);
+    if (d < 1 || d > 31 || m < 1 || m > 12 || y < 2000 || y > 2100) {
+      return "";
+    }
+    
+    return year + "-" + month + "-" + day;
+  } catch (e) {
+    return "";
+  }
+}
+
+/**
+ * Safely executes a regular expression on text and returns the trimmed first capture group.
+ *
+ * @param {string} text The target text.
+ * @param {RegExp} regex The regular expression containing at least one capture group.
+ * @return {string|null} Trimmed match value if found, null otherwise.
+ */
+function extractMatch(text, regex) {
+  if (!text || !regex) return null;
+  var match = String(text).match(regex);
+  if (match && match[1] !== undefined && match[1] !== null) {
+    return String(match[1]).trim();
+  }
+  return null;
+}

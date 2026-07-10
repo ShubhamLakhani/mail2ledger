@@ -87,3 +87,22 @@ function runParserEngineTest() {
     }
   });
 }
+
+/**
+ * Production entry point that processes the inbox and logs a summary report.
+ */
+function processInbox() {
+  var summary = InboxProcessor.process({ maxEmailsPerSender: 25 });
+  
+  Logger.log("================================");
+  Logger.log("Mail2Ledger Summary");
+  Logger.log("Senders: " + summary.sendersProcessed);
+  Logger.log("Emails Found: " + summary.emailsFound);
+  Logger.log("Processed: " + summary.processed);
+  Logger.log("Skipped: " + summary.skipped);
+  Logger.log("Failed: " + summary.failed);
+  Logger.log("Successful Writes: " + summary.successfulWrites);
+  Logger.log("Processing Rate: " + summary.processingRate);
+  Logger.log("Duration: " + summary.durationMs + " ms");
+  Logger.log("================================");
+}
