@@ -135,7 +135,8 @@ function validateTransaction(transaction) {
     errors.push("Missing transaction amount");
     hasMissing = true;
   }
-  if (!transaction.referenceNumber || String(transaction.referenceNumber).trim() === "") {
+  var isRefRequired = transaction.transactionType !== "CARD_PURCHASE";
+  if (isRefRequired && (!transaction.referenceNumber || String(transaction.referenceNumber).trim() === "")) {
     errors.push("Missing reference number");
     hasMissing = true;
   }

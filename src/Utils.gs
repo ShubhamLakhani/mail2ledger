@@ -124,3 +124,30 @@ function extractMatch(text, regex) {
   }
   return null;
 }
+
+/**
+ * Maps the account identifier (e.g. last 4 digits) to account ID using O(1) lookup.
+ *
+ * @param {Object} transaction The transaction object to update.
+ * @param {string} identifier The account identifier.
+ * @param {Object} [context] The parser context containing cache.
+ */
+function mapAccountId(transaction, identifier, context) {
+  var lookup = context && context.config ? context.config.accountsLookup : null;
+  if (lookup) {
+    var matchedAccount = lookup[identifier];
+    if (matchedAccount) {
+      transaction.accountId = matchedAccount.accountId;
+    }
+  } else {
+    // Fallback lookup if context/config is not populated
+    var accounts = getAccounts();
+    var matchedAccount = accounts.find(function(acc) {
+      return String(acc.identifier).trim() === identifier;
+    });
+    if (matchedAccount) {
+      transaction.accountId = matchedAccount.accountId;
+    }
+  }
+}
+

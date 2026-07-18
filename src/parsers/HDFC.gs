@@ -210,28 +210,3 @@ function parseHDFCCredit(context) {
   return validateTransaction(transaction);
 }
 
-/**
- * Maps the account last 4 digits identifier to account ID using O(1) lookup.
- *
- * @param {Object} transaction The transaction object to update.
- * @param {string} lastFour The 4-digit account identifier.
- * @param {Object} [context] The parser context containing cache.
- */
-function mapAccountId(transaction, lastFour, context) {
-  var lookup = context && context.config ? context.config.accountsLookup : null;
-  if (lookup) {
-    var matchedAccount = lookup[lastFour];
-    if (matchedAccount) {
-      transaction.accountId = matchedAccount.accountId;
-    }
-  } else {
-    // Fallback lookup if context/config is not populated
-    var accounts = getAccounts();
-    var matchedAccount = accounts.find(function(acc) {
-      return String(acc.identifier).trim() === lastFour;
-    });
-    if (matchedAccount) {
-      transaction.accountId = matchedAccount.accountId;
-    }
-  }
-}
